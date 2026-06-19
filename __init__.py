@@ -11,11 +11,16 @@ bl_info = {
 import bpy
 from mathutils import Vector
 
+MIN_BONE_LENGTH = 0.01
+MIN_BONE_LENGTH_TOLERANCE = 1e-6
+BONE_CONNECTION_TOLERANCE = 1e-4
+DEFAULT_BONE_DIRECTION = Vector((0.0, 1.0, 0.0))
+
 
 def _normalized_bone_name(name: str) -> str:
     if "." not in name:
         return name
-    prefix, suffix = name.split(".", 1)
+    prefix, _, suffix = name.partition(".")
     if not suffix or suffix.isdigit() or not prefix:
         return name
     return suffix
@@ -98,8 +103,10 @@ def _ensure_missing_bones(source_armature, destination_armature, bone_name_map):
         head = destination_inverse_world @ source_head_world
         tail = destination_inverse_world @ source_tail_world
 
-        if (tail - head).length < 1e-6:
-            tail = head + Vector((0.0, 0.01, 0.0))
+        bone_direction = tail - head
+        if bone_direction.length < MIN_BONE_LENGTH_TOLERANCE:
+            bone_direction = DEFAULT_BONE_DIRECTION
+        tail = head + bone_direction.normalized() * max(bone_direction.length, MIN_BONE_LENGTH)
 
         edit_bone.head = head
         edit_bone.tail = tail
@@ -114,7 +121,7 @@ def _ensure_missing_bones(source_armature, destination_armature, bone_name_map):
             parent_edit_bone = edit_bones.get(parent_name)
             if parent_edit_bone is not None:
                 edit_bone.parent = parent_edit_bone
-                if source_bone.use_connect and (edit_bone.head - parent_edit_bone.tail).length < 1e-4:
+                if source_bone.use_connect and (edit_bone.head - parent_edit_bone.tail).length < BONE_CONNECTION_TOLERANCE:
                     edit_bone.use_connect = True
 
     bpy.ops.object.mode_set(mode="OBJECT")
